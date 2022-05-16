@@ -7,7 +7,7 @@ The causal effect of children on women's labor supply is important for many reas
 
 In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples (PUMS). They use a variety of restrictions to generate a sample of women ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I was able to replicate Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
 
-![table 7]("replication.jpg")
+![table 7]("01_analysis/replication.jpg")
 
 I only replicated this analysis with data from the 1980 Census, which is dated. Additionally, given time and processing constraints, I randomly sampled 3,000 records from the total dataset, which is around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working example for updating this analysis with more recent data and larger datasets.
 
