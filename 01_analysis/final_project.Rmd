@@ -1,0 +1,440 @@
+---
+title: "The Effect of Children on Women's Labor Supply: A Bayesian Replication Analysis"
+author: "Jennah Gosciak"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: false
+---
+
+```{r setup, set.seed(1690)}
+```
+
+```{r, include = F}
+#options(warn=-1)
+suppressPackageStartupMessages(library(tibble))
+library(tidyverse)
+library(knitr)
+library(rgl)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyquant)
+library(purrr)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(haven)
+
+set.seed(1690)
+```
+
+# Background
+
+In 1998, Joshua Angrist and William Evans published an article called [__Children and Their Parents' Labor Supply: Evidence from Exogenous Variation in Family Size__](https://www.jstor.org/stable/116844) about the effect an additional child on labor supply. In general, outside the context of an experiment, it's hard to determine the true effect of children on adults' labor supply since fertility is endogenous. The authors note that many economists believe fertility and labor supply are "jointly determined." Varying research studies assess the effect of children on wages and vice versa. This study, conducted using a frequentist framework, using the "sibling-sex composition" as an instrumental variable (IV). The authors argue that an indicator variable for whether the first two children have the same sex is as if randomly assigned. The study finds that children lead to a reduction in labor supply for women--an outcome that remains significant even among the IV estimates. It also leads to lower wages on average and fewer weeks worked. The study identified small and null effects on college educated women with high wage husbands and on male labor supply outcomes, based on the sample of 'husbands' in the data.
+
+The causal effect of children on women's labor supply is important for many reasons: a reduction in women's labor supply could have positive effects on children's development, if women devote more time to caring for their children, or, if one values women's contributions to the labor market, small and null impacts may indicate that children do not pose an obstacle to women's career trajectories. Large negative impacts may provide some explanation for the persistent gender wage gap. In 2020, women earned 84% of what men did ([Pew Research Center](https://www.pewresearch.org/fact-tank/2021/05/25/gender-pay-gap-facts/), 2021). Given evidence in recent years of delayed family formation, particularly in large cities and urban areas, the impact of children on women's labor supply may be a motivating factor ([Bui & Miller](https://www.nytimes.com/interactive/2018/08/04/upshot/up-birth-age-gap.html), 2018). The effect is both interesting in terms of causal research and the application of IV, but it's also meaningful for reasons Angrist and Evans don't even mention in their article.
+
+In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples (PUMS). They use a variety of restrictions to generate a sample of women, ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I was able to replicate Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
+
+![table 7]("replication.jpg")
+
+I only replicated this analysis with data from the 1980 Census, which is dated. Additionally, given time and processing constraints, I randomly sampled only 3,000 records from the total dataset, which is around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working exampe for updating this analysis with more recent data and larger datasets.
+
+For the Bayesian analysis, I use the following methods:
+* a simple linear model with a normal PDF as the likelihood and `incwage` as the outcome
+* a simple linear model with a normal PDF as the likelihood and `log(incwage)` as the outcome
+* a two-stage model with a Probit in the first stage for the decision function of having an additional child and a normal likelihood in the second stage for the impact of children on `log(incwage)`
+  * This approach is based off of the likelihood function in 2.3 of the [sampleSelection vignette](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf)
+
+```{r}
+## load data
+df <- read_dta("../00_data/sample1.dta")
+df <- df %>% 
+  # create indicator for some college
+  mutate(coll = if_else(str_sub(educus, 1, 1) == "8", 1, 0))
+
+df_samp <- df %>% 
+  sample_n(3000)
+
+df_samp <- df_samp %>% 
+  mutate(across(c("age", "age_fbirth"), ~ . - mean(., na.rm = T))) %>% 
+  mutate(l_incwage = if_else(incwage <= 0, log(1), log(incwage)),
+         l_wkswork1 = if_else(wkswork1 <= 0, log(1), log(wkswork1)))
+
+df_samp %>% 
+  group_by(samesex) %>% 
+  summarize(n = n())
+```
+
+```{r}
+# distribution of states
+df_samp %>% 
+  group_by(stateus) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n))
+```
+```{r}
+## distribution of education
+df_samp %>% 
+  group_by(coll) %>% 
+  summarize(n = n())
+```
+
+
+```{r}
+hist(df_samp$incwage, main = "Histogram of wage income")
+
+hist(df_samp$l_incwage, main = "Histogram of log wage")
+```
+
+# Bayesian Analysis
+
+## Running with `rstanarm` for initial analysis
+
+```{r, cache = TRUE}
+# Running with rstanarm
+post <-
+  stan_glm(
+    incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post
+
+post_log <-
+  stan_glm(
+    l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post_log
+```
+
+```{r}
+pp_check(post, plotfun = "loo_intervals")
+pp_check(post_log, plotfun = "loo_intervals")
+```
+
+```{r}
+pp_check(post, plotfun = "scatter_avg")
+
+pp_check(post_log, plotfun = "scatter_avg")
+```
+
+
+
+## Linear model with untransformed outcome
+
+```{r}
+# display stan code
+writeLines(readLines("linear.stan"))
+```
+
+```{r}
+# use normal priors
+m <- c(8000, -2000, 0, -300, -40, -40, 2000, 2000, 2000)
+s<- c(500, 3000, 600, 400, 140, 140, 3000, 3000, 3000)
+```
+
+```{r}
+# define covariates
+cov <- c("cnum_mt2", "age", "age_fbirth", "f_boy", "s_boy", "r_black", "hisp", "r_oth")
+
+# generate stan data
+stan_data <- list(N = nrow(df_samp), K = 8, y = df_samp$incwage, 
+                                        X = df_samp[, cov],
+                                        prior_only = TRUE, m = m, 
+                                        scale = s,
+                                        r = 1)
+
+```
+
+```{r, cache = TRUE}
+# call stan for prior predictive distribution checks
+pre <- stan("linear.stan", data = stan_data, seed = 12345)
+# print output
+print(pre, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+hist(rstan::extract(pre, par = "yrep")$yrep)
+```
+
+```{r}
+pairs(pre, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo(pre)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+```{r, cache = TRUE}
+stan_data$prior_only <- FALSE
+post <- stan("linear.stan", data = stan_data, seed = 12345)
+# print output
+print(post, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(rstan::extract(post, par = "yrep")$yrep)
+```
+```{r}
+pairs(post, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+loo(post)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(post, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+## Linear model with log-transformed outcome
+
+```{r, cache = TRUE}
+# set generic priors
+m <- rep(0, 9)
+s<- rep(1, 9)
+
+stan_data$y <-  df_samp$l_incwage
+stan_data$m <- m
+stan_data$scale <- s
+stan_data$prior_only = TRUE
+
+pre_l <- stan("linear.stan", data = stan_data, seed = 12345)
+# print output
+print(pre_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(as.numeric(rstan::extract(pre_l, par = "yrep")$yrep), main = "Histogram of prior predictive distribution")
+```
+
+```{r}
+pairs(pre_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo_pre <- loo(pre_l)
+loo_pre
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre_l, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+```{r, cache = TRUE}
+stan_data$prior_only = FALSE
+post_l <- stan("linear.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(post_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(as.numeric(rstan::extract(post_l, par = "yrep")$yrep), main = "Histogram of posterior predictive distribution")
+```
+
+```{r}
+pairs(post_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(post_l, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+loo_post <- loo(post_l)
+loo_post
+
+loo_compare(loo_pre, loo_post)
+```
+
+## Graphical models
+```{r, fig.width = 10}
+library(dagitty)
+library(ggdag)
+
+# visualizing the instrumental variables problem
+dagify(log_wage ~ child + u, child ~ same_sex + u, exposure = "child", outcome = "log_wage", latent = "u") %>% ggdag_instrumental(text_size = 2) + theme_void()
+```
+
+## IV with Heckman Two-Step Process
+
+```{r}
+source(file.path("GLD_helpers.R"))
+# set prior for rho with gld solver bounded
+a_s <- GLD_solver_bounded(bounds = -0.9:1, median = 0.3, IQR = 0.6)
+r <- c(0.3, 0.6, a_s[1], a_s[2])
+r
+
+hist(qgld(runif(10000), r[1], r[2], r[3], r[4]), main = "Prior distribution of rho")
+```
+
+```{r}
+# display stan code
+writeLines(readLines("iv_bin.stan"))
+```
+
+```{r}
+# subset the data
+df_child <- df_samp %>% 
+  filter(cnum_mt2 == 1)
+
+df_nochild <- df_samp %>% 
+  filter(cnum_mt2 == 0)
+
+# reset covariates
+cov <- c("age", "age_fbirth", "f_boy", "s_boy", "r_black", "hisp", "r_oth")
+
+# set stan data
+stan_data_iv <- list(N = nrow(df_samp),
+                  N_child = nrow(df_child),
+                  N_nochild = nrow(df_nochild),
+                  K = 7,
+                  X_child_s = df_child[, c("samesex", cov)],
+                  X_nochild_s = df_nochild[, c("samesex", cov)],
+                  X_child = df_child[, c(cov)],
+                  X_nochild = df_nochild[, c(cov)],
+                  y_child = df_child$l_incwage,
+                  y_nochild = df_nochild$l_incwage,
+                  prior_only = TRUE,
+                  m = rep(-0.1, 5), 
+                  scale = rep(0.3, 5), r = r)
+```
+
+```{r, cache = TRUE}
+# call program without data for prior predictive checks
+pre_iv <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
+print(pre_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+```
+
+```{r}
+pairs(pre_iv, pars = c("alpha0", "beta0", "beta2", "sigma", "rho"))
+```
+
+```{r}
+pp_check(c(as.numeric(stan_data_iv$y_child), as.numeric(stan_data_iv$y_nochild)),
+  rstan::extract(pre_iv, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+
+```{r, cache = TRUE}
+stan_data_iv$prior_only <- FALSE
+
+post_iv <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
+print(post_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+```
+```{r}
+pairs(post_iv, pars = c("alpha0", "beta2", "sigma", "rho"))
+```
+
+```{r}
+pp_check(c(as.numeric(stan_data_iv$y_child), as.numeric(stan_data_iv$y_nochild)),
+  rstan::extract(post_iv, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+loo_post_iv <- loo(post_iv)
+loo_post_iv
+```
+
+## Re-run with weeks worked outcome
+```{r, cache = TRUE}
+# set stan data
+stan_data_iv <- list(N = nrow(df_samp),
+                  N_child = nrow(df_child),
+                  N_nochild = nrow(df_nochild),
+                  K = 7,
+                  X_child_s = df_child[, c("samesex", cov)],
+                  X_nochild_s = df_nochild[, c("samesex", cov)],
+                  X_child = df_child[, c(cov)],
+                  X_nochild = df_nochild[, c(cov)],
+                  y_child = df_child$wkswork1,
+                  y_nochild = df_nochild$wkswork1,
+                  prior_only = FALSE,
+                  m = rep(-0.1, 5), 
+                  scale = rep(0.3, 5), r = r)
+
+post_iv_wk <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
+print(post_iv_wk, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+```
+
+
+## Re-run two-stage model for college subgroup
+
+```{r, cache = TRUE}
+# subset the data
+df_samp2 <- df %>%
+  filter(coll == 1) %>% 
+  sample_n(3000) %>% 
+  mutate(across(c("age", "age_fbirth"), ~ . - mean(., na.rm = T))) %>% 
+  mutate(l_incwage = if_else(incwage <= 0, log(1), log(incwage)),
+         l_wkswork1 = if_else(wkswork1 <= 0, log(1), log(wkswork1)))
+
+df_child <- df_samp2 %>% 
+  filter(cnum_mt2 == 1)
+
+df_nochild <- df_samp2 %>% 
+  filter(cnum_mt2 == 0)
+
+# set stan data
+stan_data_iv <- list(N = nrow(df_samp2),
+                  N_child = nrow(df_child),
+                  N_nochild = nrow(df_nochild),
+                  K = 7,
+                  X_child_s = df_child[, c("samesex", cov)],
+                  X_nochild_s = df_nochild[, c("samesex", cov)],
+                  X_child = df_child[, c(cov)],
+                  X_nochild = df_nochild[, c(cov)],
+                  y_child = df_child$l_incwage,
+                  y_nochild = df_nochild$l_incwage,
+                  prior_only = FALSE,
+                  m = rep(-0.1, 5), 
+                  scale = rep(0.3, 5), r = r)
+
+post_iv_coll <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
+print(post_iv_coll, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+```
+
+
+
+
+
+
+
+
+
+
+
+

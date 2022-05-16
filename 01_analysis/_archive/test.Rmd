@@ -1,0 +1,94 @@
+## Running with `rstanarm` for initial analysis
+
+```{r}
+# Running with rstanarm
+post <-
+  stan_glm(
+    incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post
+
+post_log <-
+  stan_glm(
+    l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post_log
+```
+
+## Linear model with untransformed outcome
+
+```{r}
+source("GLD_helpers.R")
+
+m <- c(8000, -2000, 0, -300, -40, -40, 2000, 2000, 2000, 30)
+s<- c(500, 3000, 600, 400, 140, 140, 3000, 3000, 3000, 40)
+```
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 6, y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "r_black", "hisp", "r_oth")],
+                                        prior_only = TRUE, m = m, 
+                                        scale = s)
+pre <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(pre, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+hist(rstan::extract(pre, par = "yrep")$yrep)
+```
+
+```{r}
+pairs(pre, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo(pre)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 6, 
+                                        y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = FALSE, m = m, 
+                                        scale = s)
+post <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(post, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(rstan::extract(post, par = "yrep")$yrep)
+```
+```{r}
+pairs(post, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+loo(post)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(post, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```

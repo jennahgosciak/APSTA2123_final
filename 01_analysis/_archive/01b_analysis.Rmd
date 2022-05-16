@@ -1,0 +1,281 @@
+---
+title: "Final Project"
+author: "Jennah Gosciak"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document
+---
+
+```{r setup, set.seed(1690)}
+#knitr::opts_chunk$set(cache = T)
+```
+
+```{r, include = F}
+#options(warn=-1)
+suppressPackageStartupMessages(library(tibble))
+library(tidyverse)
+library(knitr)
+library(rgl)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyquant)
+library(purrr)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(haven)
+```
+
+```{r}
+## load data
+df <- read_dta("../00_data/sample1.dta")
+df_samp <- df %>% 
+  sample_n(3000)
+
+df_samp <- df_samp %>% 
+  mutate(across(c("age", "age_fbirth"), ~ . - mean(., na.rm = T)))
+
+df_samp %>% 
+  group_by(samesex) %>% 
+  summarize(n = n())
+```
+
+```{r}
+lm(incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth, data = df_samp)
+```
+
+```{r}
+library(rstanarm)
+post <-
+  stan_glm(
+    incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post
+```
+
+
+```{r}
+source("GLD_helpers.R")
+
+lq <- c(-4000, -3000, -200, -800, -100, -100, 1000, 500, 500, 10)
+m <- c(-3000, -2000, 0, -300, -40, -40, 2000, 2000, 2000, 30)
+uq <- c(-1000, 0, 300, 200, 40, 40, 3000, 4000, 4000, 50)
+oq <- c(0, 1000, 400, 400, 60, 60, 4000, 5000, 5000, 0)
+r <- c(3000, 3000, 600, 400, 140, 140, 3000, 3000, 3000, 40)
+
+a_s_alpha  <- GLD_solver_LBFGS(lower_quartile = lq[1],  median = m[1], upper_quartile = uq[1],
+                        other_quantile = oq[1], alpha = 0.95)
+
+a_s_beta1  <- GLD_solver_LBFGS(lower_quartile = lq[2],  median = m[2], upper_quartile = uq[2],
+                        other_quantile = oq[2], alpha = 0.95)
+
+a_s  <- GLD_solver_LBFGS(lower_quartile = lq[3],  median = m[3], upper_quartile = uq[3],
+                        other_quantile = oq[3], alpha = 0.95)
+
+a_s_sigma <- GLD_solver_LBFGS(lower_quartile = lq[10],  median = m[10], upper_quartile = uq[10],
+                        other_quantile = 0, alpha = 0)
+
+# asymmetry and steepness for prior distrib
+for (i in 1:10) {
+  if (i == 10) {
+    a_s  <- GLD_solver_LBFGS(lower_quartile = lq[i],  median = m[i], upper_quartile = uq[i],
+                        other_quantile = oq[i], alpha = 0) 
+  } else {
+    a_s  <- GLD_solver_LBFGS(lower_quartile = lq[i],  median = m[i], upper_quartile = uq[i],
+                        other_quantile = oq[i], alpha = 0.95)
+  }
+      
+  if (i == 1) {
+    a <- c(a_s[1])
+    s <- c(a_s[2])
+  } else {
+    a <- c(a, a_s[1])
+    s <- c(s, a_s[2])
+  }
+  
+}
+a
+s
+```
+```{r}
+lm(incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth, data = df_samp)
+```
+
+```{r}
+for (i in 1:10) {
+  q <- qgld(runif(10000), median = m[i], IQR = r[i], a[i], s[i])
+  hist(q)
+}
+```
+
+
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, 
+                                             y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = TRUE, m = m, 
+                                        scale = s)
+pre <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(pre, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+hist(rstan::extract(pre, par = "yrep")$yrep)
+
+pairs(pre, pars = c("alpha", "beta", "sigma"))
+
+loo(pre)
+```
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, 
+                                        y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = FALSE, m = m, 
+                                        r = r, a = a, s = s)
+post <- stan("linear.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(post, pars = c("alpha", "beta", "sigma"))
+```
+
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre, par = "yrep")$yrep[1:40, ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+pairs(post, pars = c("alpha", "beta[1]"))
+```
+
+
+```{r}
+df_movers <- df %>% 
+  filter(ps_f_svy_cmove == 1)
+df_stayers <- df %>% 
+  filter(ps_f_svy_cmove == 0)
+
+stan_data <- list(N = nrow(df),
+                  N_movers = nrow(df_movers),
+                  N_stayers = nrow(df_stayers),
+                  K = 4,
+                  X_movers_s = cbind(df_movers$ra_grp_exp,
+                                     df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers_s = cbind(df_stayers$ra_grp_exp,
+                                      df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  X_movers = cbind(df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers = cbind(df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  y_movers = df_movers$ps_happy_scale123_z_ad,
+                  y_stayers = df_stayers$ps_happy_scale123_z_ad,
+                  prior_only = 0,
+                  m = c(0, 0, 0, 0, 0),
+                  scale = c(1, 1, 1, 1, 1), r = 1)
+```
+
+
+```{r}
+stan_data$prior_only = F
+post_iv <- stan("iv_bin2.stan", data = stan_data, chains = 1, seed = 1234, init = 1)
+post_iv
+```
+```{r}
+loo(post_iv)
+```
+
+```{r}
+df_movers <- df_cell %>% 
+  filter(mn_f_svy_cmove >= 0.5)
+df_stayers <- df_cell %>% 
+  filter(mn_f_svy_cmove < 0.5)
+
+stan_data <- list(N = nrow(df_cell),
+                  N_movers = nrow(df_movers),
+                  N_stayers = nrow(df_stayers),
+                  K = 4,
+                  X_movers_s = cbind(df_movers$ra_grp_exp,
+                                     df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers_s = cbind(df_stayers$ra_grp_exp,
+                                      df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  X_movers = cbind(df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers = cbind(df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  y_movers = df_movers$mn_happy_scale123_z_ad,
+                  y_stayers = df_stayers$mn_happy_scale123_z_ad,
+                  prior_only = 0,
+                  m = c(0, 0, 0, 0, 0),
+                  scale = c(1, 1, 1, 1, 1), r = 1)
+
+post_iv_cell <- stan("iv_bin2.stan", data = stan_data, chains = 1, seed = 1234, init = 1)
+post_iv_cell
+```
+
+```{r}
+df2 <- df %>% 
+  filter(ps_rad_in_head2009 > 0)
+
+df_movers <- df2 %>% 
+  filter(ps_f_svy_cmove == 1)
+df_stayers <- df2 %>% 
+  filter(ps_f_svy_cmove == 0)
+
+stan_data <- list(N = nrow(df2),
+                  N_movers = nrow(df_movers),
+                  N_stayers = nrow(df_stayers),
+                  K = 4,
+                  X_movers_s = cbind(df_movers$ra_grp_exp,
+                                     df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers_s = cbind(df_stayers$ra_grp_exp,
+                                      df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  X_movers = cbind(df_movers$x_f_site_balt, df_movers$x_f_site_bos,
+                                   df_movers$x_f_site_chi, df_movers$x_f_site_la),
+                  X_stayers = cbind(df_stayers$x_f_site_balt, df_stayers$x_f_site_bos,
+                                   df_stayers$x_f_site_chi, df_stayers$x_f_site_la),
+                  y_movers = log(df_movers$ps_rad_in_head2009),
+                  y_stayers = log(df_stayers$ps_rad_in_head2009),
+                  prior_only = 0,
+                  m = c(10, 0.5, 0.5, 0.5, 0.5),
+                  scale = c(1, 1, 1, 1, 1), r = 1)
+
+post_iv <- stan("iv_bin.stan", data = stan_data, seed = 1234, init = 1, chains = 1)
+post_iv
+```
+
+```{r}
+loo(post_iv)
+```
+
+
+```{r}
+# frequentist approach
+library(sem)
+summary(tsls(ps_rad_in_head2009 ~ ps_f_svy_cmove + x_f_site_balt + x_f_site_bos + x_f_site_chi + x_f_site_la, 
+             ~ ra_grp_exp + x_f_site_balt + x_f_site_bos + x_f_site_chi + x_f_site_la, data=df))
+```
+
+
+
+

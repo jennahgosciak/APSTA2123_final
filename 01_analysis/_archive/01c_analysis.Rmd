@@ -1,0 +1,326 @@
+---
+title: "The Effect of Children on Women's Labor Supply: A Bayesian Replication Analysis"
+author: "Jennah Gosciak"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document
+---
+
+```{r setup, set.seed(1690)}
+#knitr::opts_chunk$set(cache = T)
+```
+
+```{r, include = F}
+#options(warn=-1)
+suppressPackageStartupMessages(library(tibble))
+library(tidyverse)
+library(knitr)
+library(rgl)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyquant)
+library(purrr)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(haven)
+```
+
+```{r}
+## load data
+df <- read_dta("../00_data/sample1.dta")
+df_samp <- df %>% 
+  sample_n(10000)
+
+df_samp <- df_samp %>% 
+  mutate(across(c("age", "age_fbirth"), ~ . - mean(., na.rm = T))) %>% 
+  mutate(l_incwage = if_else(incwage <= 0, log(1), log(incwage)))
+
+df_samp %>% 
+  group_by(samesex) %>% 
+  summarize(n = n())
+```
+```{r}
+hist(df_samp$incwage)
+
+hist(df_samp$l_incwage)
+```
+
+
+## Running frequentist model (for comparison)
+```{r}
+lm(incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth, data = df_samp)
+
+lm(l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth, data = df_samp)
+```
+
+## Running with `rstanarm` for initial analysis
+
+```{r}
+# Running with rstanarm
+post <-
+  stan_glm(
+    incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post
+
+post_log <-
+  stan_glm(
+    l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    data = df_samp,
+    family = gaussian(),
+    prior = cauchy(),
+    prior_intercept = cauchy(),
+    seed = 12345
+  )
+post_log
+```
+
+
+```{r}
+source("GLD_helpers.R")
+
+m <- c(8000, -2000, 0, -300, -40, -40, 2000, 2000, 2000, 30)
+s<- c(500, 3000, 600, 400, 140, 140, 3000, 3000, 3000, 40)
+```
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = TRUE, m = m, 
+                                        scale = s)
+pre <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(pre, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+hist(rstan::extract(pre, par = "yrep")$yrep)
+```
+
+```{r}
+pairs(pre, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo(pre)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, 
+                                        y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = FALSE, m = m, 
+                                        scale = s)
+post <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(post, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(rstan::extract(post, par = "yrep")$yrep)
+```
+```{r}
+pairs(post, pars = c("alpha", "beta", "sigma"))
+```
+```{r}
+loo(post)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(post, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+## Run with log-transformed parameter
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, y = df_samp$l_incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = TRUE, m = m, 
+                                        scale = s)
+pre_l <- stan("linear2.stan", data = stan_data, seed = 12345)
+# print output
+print(pre_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(rstan::extract(pre_l, par = "yrep")$yrep)
+```
+
+```{r}
+pairs(pre_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo_pre <- loo(pre_l)
+loo_pre
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(pre_l, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+stan_data$prior_only = FALSE
+post_l <- stan("linear2.stan", data = stan_data,
+                                        seed = 12345)
+# print output
+print(post_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+hist(rstan::extract(post_l, par = "yrep")$yrep)
+```
+
+```{r}
+pairs(post_l, pars = c("alpha", "beta", "sigma"))
+```
+
+```{r}
+loo_post <- loo(post_l)
+loo_post
+
+loo_compare(loo_pre, loo_post)
+```
+
+```{r}
+pp_check(as.numeric(stan_data$y),
+  rstan::extract(post_l, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+
+```{r}
+stan_data <- list(N = nrow(df_samp), K = 8, 
+                                        y = df_samp$incwage, 
+                                        X = df_samp[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                                        prior_only = FALSE, m = m, 
+                                        scale = s, r = 0.5)
+post_gamma <- stan("linear_gamma.stan", data = stan_data,
+                                         seed = 12345, chains = 1)
+# print output
+print(post_gamma, pars = c("alpha", "beta", "shape"))
+```
+
+
+```{r}
+hist_val <- df_samp %>% 
+  filter(incwage > 0) %>% 
+  pull(l_incwage)
+
+hist(hist_val)
+
+hist_val2 <- df_samp %>% 
+  pull(l_incwage)
+
+hist(hist_val2)
+```
+
+```{r}
+df_samp2 <- df_samp %>% 
+  # only examine the effect on women who are already working
+  #filter(incwage > 0)
+  sample_n(1000)
+
+df_movers <- df_samp2 %>% 
+  filter(cnum_mt2 == 1)
+
+df_stayers <- df_samp2 %>% 
+  filter(cnum_mt2 == 0)
+
+stan_data_iv <- list(N = nrow(df_samp2),
+                  N_movers = nrow(df_movers),
+                  N_stayers = nrow(df_stayers),
+                  K = 8,
+                  X_movers_s = df_movers[, c("samesex", "cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                  X_stayers_s = df_stayers[, c("samesex", "cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                  X_movers = df_movers[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                  X_stayers = df_stayers[, c("cnum_mt2", "age", "age_fbirth", "f_boy", 
+                                                   "s_boy", "r_black", "hisp", "r_oth")],
+                  y_movers = df_movers$l_incwage,
+                  y_stayers = df_stayers$l_incwage,
+                  prior_only = TRUE,
+                  m = c(6, 0, 6, 0.5, 0),
+                  scale = rep(1, 5), r = 100)
+```
+
+```{r}
+pre_iv <- stan("iv_bin2.stan", data = stan_data_iv, seed = 1234, init = 1)
+print(pre_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma"))
+```
+
+```{r}
+pp_check(c(as.numeric(stan_data_iv$y_movers), as.numeric(stan_data_iv$y_stayers)),
+  rstan::extract(pre_iv, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+
+```{r}
+loo_pre_iv <- loo(pre_iv)
+loo_pre_iv
+```
+
+
+```{r}
+stan_data_iv$prior_only <- FALSE
+post_iv <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234, init = 1, control = list(adapt_delta = 0.99))
+print(post_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma"))
+```
+```{r}
+pairs(post_iv, pars = c("alpha1"))
+```
+```{r}
+pairs(post_iv, pars = c("beta1"))
+```
+
+```{r}
+loo_post_iv <- loo(post_iv)
+loo_post_iv
+```
+
+```{r}
+pp_check(c(as.numeric(stan_data_iv$y_movers), as.numeric(stan_data_iv$y_stayers)),
+  rstan::extract(post_iv, par = "yrep")$yrep[1:150, ],
+  ppc_dens_overlay
+)
+```
+
+```{r}
+loo_compare(loo_pre_iv, loo_post_iv)
+```
+
+
+
+
+

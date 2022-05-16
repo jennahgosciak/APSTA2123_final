@@ -1,6 +1,8 @@
 ## Repo specific
 00_data/
 
+nul*
+
 # History files
 .Rhistory
 .Rapp.history
