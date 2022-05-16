@@ -16,3 +16,5 @@ For the Bayesian analysis, I use the following methods:
 * a simple linear model with a normal PDF as the likelihood and `log(incwage)` as the outcome
 * a two-stage model with a Probit in the first stage for the decision function of having an additional child and a normal likelihood in the second stage for the impact of children on `log(incwage)`
   * This approach is based off of the likelihood function in 2.3 of the [sampleSelection vignette](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf)
+
+**Read the full analysis [here](https://github.com/jennahgosciak/APSTA2123_final/blob/main/01_analysis/final_project.pdf) with supplemental analyses [here](https://github.com/jennahgosciak/APSTA2123_final/blob/main/01_analysis/add_analysis.pdf).**
