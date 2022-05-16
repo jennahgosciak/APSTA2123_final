@@ -35,15 +35,15 @@ set.seed(1690)
 
 # Background
 
-In 1998, Joshua Angrist and William Evans published an article called [__Children and Their Parents' Labor Supply: Evidence from Exogenous Variation in Family Size__](https://www.jstor.org/stable/116844) about the effect an additional child on labor supply. In general, outside the context of an experiment, it's hard to determine the true effect of children on adults' labor supply since fertility is endogenous. The authors note that many economists believe fertility and labor supply are "jointly determined." Varying research studies assess the effect of children on wages and vice versa. This study, conducted using a frequentist framework, using the "sibling-sex composition" as an instrumental variable (IV). The authors argue that an indicator variable for whether the first two children have the same sex is as if randomly assigned. The study finds that children lead to a reduction in labor supply for women--an outcome that remains significant even among the IV estimates. It also leads to lower wages on average and fewer weeks worked. The study identified small and null effects on college educated women with high wage husbands and on male labor supply outcomes, based on the sample of 'husbands' in the data.
+In 1998, Joshua Angrist and William Evans published an article called [_Children and Their Parents' Labor Supply: Evidence from Exogenous Variation in Family Size_](https://www.jstor.org/stable/116844) about the effect an additional child on labor supply. In general, outside the context of an experiment, it's hard to determine the true effect of children on adults' labor supply since fertility is endogenous. The authors note that many economists believe fertility and labor supply are "jointly determined." Varying research studies assess the effect of children on wages and vice versa. This study, conducted using a frequentist framework, using the "sibling-sex composition" as an instrumental variable (IV). The authors argue that an indicator variable for whether the first two children have the same sex is as if randomly assigned. The study finds that children lead to a reduction in labor supply for women--an outcome that remains significant even among the IV estimates. It also leads to lower wages on average and fewer weeks worked. The study identified small and null effects for men and college educated women with high wage husbands.
 
 The causal effect of children on women's labor supply is important for many reasons: a reduction in women's labor supply could have positive effects on children's development, if women devote more time to caring for their children, or, if one values women's contributions to the labor market, small and null impacts may indicate that children do not pose an obstacle to women's career trajectories. Large negative impacts may provide some explanation for the persistent gender wage gap. In 2020, women earned 84% of what men did ([Pew Research Center](https://www.pewresearch.org/fact-tank/2021/05/25/gender-pay-gap-facts/), 2021). Given evidence in recent years of delayed family formation, particularly in large cities and urban areas, the impact of children on women's labor supply may be a motivating factor ([Bui & Miller](https://www.nytimes.com/interactive/2018/08/04/upshot/up-birth-age-gap.html), 2018). The effect is both interesting in terms of causal research and the application of IV, but it's also meaningful for reasons Angrist and Evans don't even mention in their article.
 
-In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples (PUMS). They use a variety of restrictions to generate a sample of women, ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I was able to replicate Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
+In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples (PUMS). They use a variety of restrictions to generate a sample of women ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I was able to replicate Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
 
 ![table 7]("replication.jpg")
 
-I only replicated this analysis with data from the 1980 Census, which is dated. Additionally, given time and processing constraints, I randomly sampled only 3,000 records from the total dataset, which is around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working exampe for updating this analysis with more recent data and larger datasets.
+I only replicated this analysis with data from the 1980 Census, which is dated. Additionally, given time and processing constraints, I randomly sampled 3,000 records from the total dataset, which is around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working example for updating this analysis with more recent data and larger datasets.
 
 For the Bayesian analysis, I use the following methods:
 * a simple linear model with a normal PDF as the likelihood and `incwage` as the outcome
@@ -94,7 +94,7 @@ hist(df_samp$l_incwage, main = "Histogram of log wage")
 
 # Bayesian Analysis
 
-## Running with `rstanarm` for initial analysis
+## Running with `rstanarm` for initial testing
 
 ```{r, cache = TRUE}
 # Running with rstanarm
@@ -121,8 +121,15 @@ post_log <-
 post_log
 ```
 
+Using the output generated by `rstanarm` we can run some posterior preditive checks
+
 ```{r}
 pp_check(post, plotfun = "loo_intervals")
+```
+
+This plot shows the 
+
+```{r}
 pp_check(post_log, plotfun = "loo_intervals")
 ```
 

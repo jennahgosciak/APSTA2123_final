@@ -1,5 +1,5 @@
 ---
-title: "The Effect of Children on Women's Labor Supply: A Bayesian Replication Analysis"
+title: "Supplemental Analyses"
 author: "Jennah Gosciak"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
