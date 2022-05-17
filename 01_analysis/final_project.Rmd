@@ -322,6 +322,17 @@ pp_check(as.numeric(stan_data$y),
                                                    size = 150), ],
   ppc_dens_overlay
 )
+
+# comparison of predictions
+yrep <- rstan::extract(post_l, "yrep")[[1]]
+low  <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 1 / 3)
+high <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 2 / 3)
+
+y <- stan_data$y
+
+c(too_low = mean(y < low), 
+  just_right = mean(y > low & y < high),
+  too_high = mean(y > high))
 ```
 
 The observed values of y have two peaks: one closer to 0 and the other farther away. This demonstrates that there are likely two groups: those who do not work at all and those who are working already. Consequently, the posterior predictive distribution, which is still approximately normal, does not approximate the observed values of y as well. It tends to predict values of y that are in the middle of both peaks for the observed values of y.
@@ -554,7 +565,7 @@ The effect of additional children among college-educated women is likely positiv
 
 ## Frequentist example (for reference)
 
-* I include these results, which use maximum likelihood estimation, for comparison. The first chunk uses the same sample as the non-subgroup models (3,000 records total). The second chunk uses the first sample. By comparing the different results, one can see the estimates of the effect of fertility vary drastically between the small sample and the larger sample. Similarly, the small sample estimates do not substantively align with the full sample estimates. It may be more accurate to run the stan models on the full sample. However, my computer does not have the memory or processing power to do so.
+I include these results, which use maximum likelihood estimation, for comparison. The first chunk uses the same sample as the non-subgroup models (3,000 records total). The second chunk uses the first sample. By comparing the different results, one can see the estimates of the effect of fertility vary drastically between the small sample and the larger sample. Similarly, the small sample estimates do not substantively align with the full sample estimates. It may be more accurate to run the stan models on the full sample. However, my computer does not have the memory or processing power to do so.
 
 ```{r}
 # output using the sample
@@ -629,7 +640,7 @@ To parse out a causal effect, Angrist and Evans propose using instrumental varia
   * Similarly, women with two children are likely not representative of the population of all women.
 4. perhaps the likelihood derivation in my Stan program is incorrect
 
-The results from this Bayesian analysis are surprising, but they are also very much exploratory. At the very least, I hope this functions as a working example for my future work. My original final project idea was to examine the results of the Moving to Opportunity (MTO) experiment, which is a famous experiment about the impact of neighborhoods on life outcomes like employment and income later in life. In particular, I wanted to examine subgroup impacts to see if the significance values identified in the frequentist analysis truly indicated non-zero impacts. However, the public use file (PUF) for the MTO experiment is masked to such an extent that it's impossible to use it for anything other than point estimates. Since the MTO study uses random assignment as an instrument for actual treatment compliance, the instrument in the study is likely much stronger and, if the data ever becomes accessible, I would be interested in the estimates generated from the models coded here.
+The results from this Bayesian analysis are surprising, but they are also broad and exploratory. At the very least, I hope this analysis functions as a working example for any future research I do. My original final project idea was to examine the results of the Moving to Opportunity (MTO) experiment, which is a famous experiment about the impact of neighborhoods on life outcomes like employment and income later in life. In particular, I wanted to examine subgroup impacts to see if the significance values identified in the frequentist analysis truly indicated non-zero impacts. However, the public use file (PUF) for the MTO experiment is masked to such an extent that it's impossible to use it for anything other than point estimates. Since the MTO study uses random assignment as an instrument for actual treatment compliance, the instrument in the study is likely much stronger and, if the data ever becomes accessible, I would be interested in the estimates generated from the models coded here.
 
 
 
