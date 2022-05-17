@@ -23,33 +23,46 @@ options(mc.cores = parallel::detectCores())
 library(readr)
 library(dplyr)
 library(ggplot2)
-library(tidyquant)
 library(purrr)
 library(rstanarm)
 library(loo)
 library(bayesplot)
 library(haven)
+library(sampleSelection)
+library(dagitty)
+library(ggdag)
 
 set.seed(1690)
 ```
 
 # Background
 
-In 1998, Joshua Angrist and William Evans published an article called [_Children and Their Parents' Labor Supply: Evidence from Exogenous Variation in Family Size_](https://www.jstor.org/stable/116844) about the effect an additional child on labor supply. In general, outside the context of an experiment, it's hard to determine the true effect of children on adults' labor supply since fertility is endogenous. The authors note that many economists believe fertility and labor supply are "jointly determined." Varying research studies assess the effect of children on wages and vice versa. This study, conducted using a frequentist framework, using the "sibling-sex composition" as an instrumental variable (IV). The authors argue that an indicator variable for whether the first two children have the same sex is as if randomly assigned. The study finds that children lead to a reduction in labor supply for women--an outcome that remains significant even among the IV estimates. It also leads to lower wages on average and fewer weeks worked. The study identified small and null effects for men and college educated women with high wage husbands.
+In 1998, Joshua Angrist and William Evans published an article called [_Children and Their Parents' Labor Supply: Evidence from Exogenous Variation in Family Size_](https://www.jstor.org/stable/116844) about the effect of an additional child on labor supply. In general, outside the context of an experiment, it's hard to determine the true effect of children on adults' labor supply since fertility is endogenous. The authors note that many economists believe fertility and labor supply are "jointly determined." Varying research studies assess the effect of children on wages and vice versa. This study, conducted using a frequentist framework, using the "sibling-sex composition" as an instrumental variable (IV). The authors argue that an indicator variable for whether the first two children have the same sex is as if randomly assigned. The study finds that children lead to a reduction in labor supply for women--an outcome that remains significant even among the IV estimates. It also leads to lower wages on average and fewer weeks worked. The study identified small and null effects for men and college educated women with high wage husbands.
 
 The causal effect of children on women's labor supply is important for many reasons: a reduction in women's labor supply could have positive effects on children's development, if women devote more time to caring for their children, or, if one values women's contributions to the labor market, small and null impacts may indicate that children do not pose an obstacle to women's career trajectories. Large negative impacts may provide some explanation for the persistent gender wage gap. In 2020, women earned 84% of what men did ([Pew Research Center](https://www.pewresearch.org/fact-tank/2021/05/25/gender-pay-gap-facts/), 2021). Given evidence in recent years of delayed family formation, particularly in large cities and urban areas, the impact of children on women's labor supply may be a motivating factor ([Bui & Miller](https://www.nytimes.com/interactive/2018/08/04/upshot/up-birth-age-gap.html), 2018). The effect is both interesting in terms of causal research and the application of IV, but it's also meaningful for reasons Angrist and Evans don't even mention in their article.
 
-In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples (PUMS). They use a variety of restrictions to generate a sample of women ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I was able to replicate Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
+In their paper, Angrist and Evans use data from the 1980 and 1990 Census Public Use Micro Samples [(PUMS)](https://international.ipums.org/international/). They use a variety of restrictions to generate a sample of women ages 21-35 whose oldest child was less than 18 years of age and who have at least two children. While Angrist and Evans run their analysis on a second sample of married women, for this project I focus on the larger sample of all women--regardless of marital status. Additionally, I focus on women's earnings, not the binary outcome of whether they are in the labor force or the number of weeks worked. I previously replicated the findings in this paper using the frequentist two stage least squares (TSLS) approach to IV. Using the detailed sample restrictions that Angrist and Evans outline in their paper, I replicated Tables 3, 6, and 7. The OLS and TSLS estimates that I replicated are below.
 
 ![table 7]("replication.jpg")
 
 I only replicated this analysis with data from the 1980 Census, which is dated. Additionally, given time and processing constraints, I randomly sampled 3,000 records from the total dataset, which is around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working example for updating this analysis with more recent data and larger datasets.
 
 For the Bayesian analysis, I use the following methods:
+
 * a simple linear model with a normal PDF as the likelihood and `incwage` as the outcome
 * a simple linear model with a normal PDF as the likelihood and `log(incwage)` as the outcome
 * a two-stage model with a Probit in the first stage for the decision function of having an additional child and a normal likelihood in the second stage for the impact of children on `log(incwage)`
-  * This approach is based off of the likelihood function in 2.3 of the [sampleSelection vignette](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf)
+  * This approach is based off of the likelihood function in 2.3 of the [`sampleSelection` vignette](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf)
+  
+**Some notes on the data:**
+
+* `cnum_mt2` is an indicator for whether a woman had more than 2 children. The sample only includes women with at least 2 children. Angrist and Evans' have a further discussion about whether this limits the applicability of the study's conclusions to all women or not.
+* `incwage` is a woman's individual income from wages. There are some negative and 0 values. I set those to 1 when calculating the log transform or the gamma distribution.
+* `wkswork1` is the number of weeks worked.
+* `age_fbirth` is the woman's age at first birth.
+* `f_boy` is an indicator for whether the woman's first child was a boy.
+* `s_boy` is an indicator for whether the woman's second child was a boy.
+* `r_black`, `hisp`, and `r_oth` are indicators for race and ethnicity.
 
 ```{r}
 ## load data
@@ -100,7 +113,8 @@ hist(df_samp$l_incwage, main = "Histogram of log wage")
 # Running with rstanarm
 post <-
   stan_glm(
-    incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    incwage ~ cnum_mt2 + age + age_fbirth + 
+      f_boy + s_boy + r_black + hisp + r_oth,
     data = df_samp,
     family = gaussian(),
     prior = cauchy(),
@@ -111,7 +125,8 @@ post
 
 post_log <-
   stan_glm(
-    l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+    l_incwage ~ cnum_mt2 + age + age_fbirth + 
+      f_boy + s_boy + r_black + hisp + r_oth,
     data = df_samp,
     family = gaussian(),
     prior = cauchy(),
@@ -121,27 +136,36 @@ post_log <-
 post_log
 ```
 
-Using the output generated by `rstanarm` we can run some posterior preditive checks
+### Using the output generated by `rstanarm` we can run some posterior preditive checks.
+
 
 ```{r}
 pp_check(post, plotfun = "loo_intervals")
 ```
 
-This plot shows the 
+The plot above shows the 100% intervals for the LOO predictive distribution. There are some extreme observed values of y, which the model does not predict, and the model predicts negative values of y, which are not substantively possible since the outcome is income. 
 
 ```{r}
 pp_check(post_log, plotfun = "loo_intervals")
 ```
 
+The plot is similar to the previous one, but shows the LOO predictive distribution for the log-transformed outcome. The LOO distribution predicts values of `y` that tend to be more extreme than the actual observed values of y. It also shows that there are many observed values at either 0 or 10 in log units, or \$0 compared to approximately \$20,000.
+
 ```{r}
 pp_check(post, plotfun = "scatter_avg")
+```
 
+This plot uses the untransformed outcome. The average predicted values of y tend to predict higher values of y than are observed, which the flat linear trend demonstrates.
+
+```{r}
 pp_check(post_log, plotfun = "scatter_avg")
 ```
 
-
+This plot uses the log-transformed outcome. The average predicted values of y don't predict the extreme values of y as well. For example, the average predicted value may be 7 when the observed value is 0. However, overall the linear trend does suggest that the average predicted values of y _do_ predict the observed values of y well; the incorrect predictions may cancel each other out.
 
 ## Linear model with untransformed outcome
+
+* This is based on the`linear.stan` file as shown in class, although I produce `log_lik` and `yrep` output as well.
 
 ```{r}
 # display stan code
@@ -173,24 +197,27 @@ pre <- stan("linear.stan", data = stan_data, seed = 12345)
 # print output
 print(pre, pars = c("alpha", "beta", "sigma"))
 ```
+
+There were no issues running the model with `prior_only = TRUE`. The values of the parameters, as the pairs plot shows below, are all approximately normal.
+
 ```{r}
-hist(rstan::extract(pre, par = "yrep")$yrep)
+hist(rstan::extract(pre, par = "yrep")$yrep,
+     main = "Prior predictive distribution")
 ```
+
+The predicted values of y are slightly skewed to the right and are centered around \$7,000. The prior predictive distribution also generates negative values of y, which are not realistic.
 
 ```{r}
 pairs(pre, pars = c("alpha", "beta", "sigma"))
 ```
 
+The pairs plot does not indicate any major issues with the parameters as indicated by the prior distributions.
+
 ```{r}
 loo(pre)
 ```
 
-```{r}
-pp_check(as.numeric(stan_data$y),
-  rstan::extract(pre, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
-  ppc_dens_overlay
-)
-```
+All 3,000 observations have Pareto K estimates > 0.7, which is an indication of outliers in the data and possibly model specification. The fact that `p_loo >> p` further indicates that the model is badly misspecified. Given the Pareto K estimates, the `elpd_loo` is inaccurate and should not be analyzed.
 
 ```{r, cache = TRUE}
 stan_data$prior_only <- FALSE
@@ -199,15 +226,24 @@ post <- stan("linear.stan", data = stan_data, seed = 12345)
 print(post, pars = c("alpha", "beta", "sigma"))
 ```
 
+Similar to the OLS results in Angrist and Evans' paper, the stan output shows that children negatively affect earnings. The 95% credible interval shows a decrease in earnings between \$3,915 and \$3,054, which encompasses the point estimate from Angrist and Evans' frequentist OLS regression.
+
 ```{r}
-hist(rstan::extract(post, par = "yrep")$yrep)
+hist(rstan::extract(post, par = "yrep")$yrep,
+     main = "Posterior predictive distribution")
 ```
+
 ```{r}
 pairs(post, pars = c("alpha", "beta", "sigma"))
 ```
+
+There are some correlations (e.g., a negative linear trend between `alpha` and `beta[1]`), but there are no major divergences and the marginal distributions are all approximately normal.
+
 ```{r}
 loo(post)
 ```
+
+Most Pareto K values are now less than 0.5, which indicates that `elpd_loo` is estimated with high accuracy for most observations. However, the `p_loo` is still higher than the number of parameters (though not significantly so), which may indicate weak predictive capability of the model. This makes sense, since the observed and predicted values of y do not overlap.
 
 ```{r}
 pp_check(as.numeric(stan_data$y),
@@ -215,6 +251,8 @@ pp_check(as.numeric(stan_data$y),
   ppc_dens_overlay
 )
 ```
+
+This plot visually shows the difference between the predicted values of y and the observed values of y. The observed values of y tend to be lower than the predicted values and there are more outliers in the observed data. The predicted values of y comprise a smoother normal distribution.
 
 ## Linear model with log-transformed outcome
 
@@ -234,24 +272,25 @@ print(pre_l, pars = c("alpha", "beta", "sigma"))
 ```
 
 ```{r}
-hist(as.numeric(rstan::extract(pre_l, par = "yrep")$yrep), main = "Histogram of prior predictive distribution")
+hist(as.numeric(rstan::extract(pre_l, par = "yrep")$yrep),
+     main = "Histogram of prior predictive distribution",
+     xlab = "yrep")
 ```
+
+Since the outcome is now in log units, the prior predictive distribution is much narrower. It is still approximately normal.
 
 ```{r}
 pairs(pre_l, pars = c("alpha", "beta", "sigma"))
 ```
+
+The prior marginal distributions for all parameters are approximately normal except for sigma, which is exponential.
 
 ```{r}
 loo_pre <- loo(pre_l)
 loo_pre
 ```
 
-```{r}
-pp_check(as.numeric(stan_data$y),
-  rstan::extract(pre_l, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
-  ppc_dens_overlay
-)
-```
+All 3,000 observations have Pareto K estimates > 0.7, which is an indication of outliers in the data and model specification. The estimates of `elpd_loo` are not accurate.
 
 ```{r, cache = TRUE}
 stan_data$prior_only = FALSE
@@ -260,48 +299,72 @@ post_l <- stan("linear.stan", data = stan_data,
 # print output
 print(post_l, pars = c("alpha", "beta", "sigma"))
 ```
+ 
+The stan output suggests that children have a negative effect on earnings, decreasing earnings by about 1.5 log units. If earnings were equal to log(10) (i.e., approximately \$22,000). This would be a decrease of around $17,000, or about 77%.
 
 ```{r}
-hist(as.numeric(rstan::extract(post_l, par = "yrep")$yrep), main = "Histogram of posterior predictive distribution")
+hist(as.numeric(rstan::extract(post_l, par = "yrep")$yrep),
+     main = "Histogram of posterior predictive distribution",
+     xlab = "yrep")
 ```
+
+The negative values of the posterior predictive distribution are no longer impossible given the outcome is log-transformed. The distribution is approximately normal, although slightly skewed to the left. Due to the influence of the data, the distribution has also shifted right (i.e. it is no longer centered at 0).
 
 ```{r}
 pairs(post_l, pars = c("alpha", "beta", "sigma"))
 ```
 
+The pairs plot shows some bivariate dependencies between `alpha` and `beta[1]` and `beta[4]` as well as between `beta[2]` and `beta[3]`. There are no divergent transitions and the marginal distributions of the parameters are approximately normal, with some skewness to the left or the right.
+
 ```{r}
 pp_check(as.numeric(stan_data$y),
-  rstan::extract(post_l, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+  rstan::extract(post_l, par = "yrep")$yrep[sample(1:length(stan_data$y), 
+                                                   size = 150), ],
   ppc_dens_overlay
 )
 ```
+
+The observed values of y have two peaks: one closer to 0 and the other farther away. This demonstrates that there are likely two groups: those who do not work at all and those who are working already. Consequently, the posterior predictive distribution, which is still approximately normal, does not approximate the observed values of y as well. It tends to predict values of y that are in the middle of both peaks for the observed values of y.
 
 ```{r}
 loo_post <- loo(post_l)
 loo_post
 
+plot(loo_post, label_points = TRUE)
+
 loo_compare(loo_pre, loo_post)
 ```
 
-## Graphical models
-```{r, fig.width = 10}
-library(dagitty)
-library(ggdag)
+All Pareto k estimates are < 0.5, which means that importance sampling is able to estimate the `elpd_loo` with accuracy. Additionally, the `p_loo` is lower than for the priors.
 
+The comparison of the prior and posterior models indicates that the posterior distribution is a better fit for the data in terms of the prediction.
+
+## Graphical models
+
+* Graphical models provide a visual for understanding the difficulties with identifying causal effects, particularly with endogenous predictors like fertility.
+* The DAG below illustrates the IV approach as outlined in Angrist and Evans' paper.
+
+```{r, fig.width = 10}
 # visualizing the instrumental variables problem
-dagify(log_wage ~ child + u, child ~ same_sex + u, exposure = "child", outcome = "log_wage", latent = "u") %>% ggdag_instrumental(text_size = 2) + theme_void()
+dagify(log_wage ~ child + u, child ~ same_sex + u, exposure = "child", 
+       outcome = "log_wage", latent = "u") %>% 
+  ggdag_instrumental(text_size = 2) + theme_void()
 ```
 
-## IV with Heckman Two-Step Process
+## IV estimates with a Bayesian approach
+
+* The likelihood function is based on 2.3 in the [sampleSelection vignette](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf)
 
 ```{r}
 source(file.path("GLD_helpers.R"))
 # set prior for rho with gld solver bounded
+# allow rho to take on values between -1 and 1
 a_s <- GLD_solver_bounded(bounds = -0.9:1, median = 0.3, IQR = 0.6)
 r <- c(0.3, 0.6, a_s[1], a_s[2])
 r
 
-hist(qgld(runif(10000), r[1], r[2], r[3], r[4]), main = "Prior distribution of rho")
+hist(qgld(runif(10000), r[1], r[2], r[3], r[4]), 
+     main = "Prior distribution of rho")
 ```
 
 ```{r}
@@ -339,45 +402,91 @@ stan_data_iv <- list(N = nrow(df_samp),
 ```{r, cache = TRUE}
 # call program without data for prior predictive checks
 pre_iv <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
-print(pre_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+print(pre_iv, pars = 
+        c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
 ```
+
+The draw from the prior distributions for the parameters make sense, given the priors.
+
+```{r}
+hist(rstan::extract(pre_iv, par = "yrep")$yrep,
+     main = "Prior predictive distribution")
+```
+
+The predicted values of y seem reasonable. In log units they range from -10 to 10, which is approximately 0 to \$22,000.
 
 ```{r}
 pairs(pre_iv, pars = c("alpha0", "beta0", "beta2", "sigma", "rho"))
 ```
 
-```{r}
-pp_check(c(as.numeric(stan_data_iv$y_child), as.numeric(stan_data_iv$y_nochild)),
-  rstan::extract(pre_iv, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
-  ppc_dens_overlay
-)
-```
-
+The bivariate plots are primarily blobs and show no bivariate dependence relationships. Except for sigma and rho, the marginal distributions are approximately normal.
 
 ```{r, cache = TRUE}
 stan_data_iv$prior_only <- FALSE
 
 post_iv <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
-print(post_iv, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+print(post_iv, pars = c("alpha0", "alpha1", 
+                        "beta0", "beta1", "beta2", "sigma", "rho"))
 ```
+
+The output shown here indicates that `beta2`, the coefficient on `cnum_mt2` is positive and greater than 1 (the 95% credible interval is from 0.76 to 1.77 while the mean is 1.26). Since the outcome is in log units, this indicates a very large increase in income ($\approx 250\%$). This is very different from the simple linear model and suggests that when accounting for the endogeneity of the predictor there is no longer a negative effect on earnings.
+
+Additionally, there are some limitations to this analysis:
+
+1. The posterior distribution is conditional on the observed data. Any irregularities on this dataset, which is only 3,000 records in this case, would skew the estimates of the posterior distribution. However, the frequentist approach, which in this case would be the Wald estimator $\hat{\beta} = \frac{cov(\text{fertility, income})}{cov(\text{fertility, same sex})}$, is highly variable across datasets of finite size N. This is especially true for weak instruments, which is likely the case here. The coefficient on same sex (`alpha1[1]`) is on average 0.12 and the 95% credible interval is between 0.04 and 0.21).
+
+2. Income is conditional on labor force participation. The observed values of y suggest that there are really two groups: in the labor force and not. The effect of children on women not in the labor force would be very different than for women already in the labor force. In addition to modeling a decision function based on the random assignment of the instrument same sex, I could have modeled a decision function for labor force participation (which would more closely resemble the examples in the `sampleSelection` vignettes). I did not add this to my analysis, but I did explore labor force participation (i.e. the number of weeks worked) as an outcome.
+
 ```{r}
 pairs(post_iv, pars = c("alpha0", "beta2", "sigma", "rho"))
 ```
 
+There is a linear trend between `beta2` and `rho`. However, it has not impacted the sampling as there are no divergent transitions or other warnings. There are no funnel shapes or other irregularities that would be cause for concern.
+
 ```{r}
-pp_check(c(as.numeric(stan_data_iv$y_child), as.numeric(stan_data_iv$y_nochild)),
-  rstan::extract(post_iv, par = "yrep")$yrep[sample(1:length(stan_data$y), size = 150), ],
+pp_check(c(as.numeric(stan_data_iv$y_child),
+           as.numeric(stan_data_iv$y_nochild)),
+  rstan::extract(post_iv, par = "yrep")$yrep[sample(1:nrow(df_samp),
+                                                    size = 150), ],
   ppc_dens_overlay
 )
 ```
+
+The posterior predictive distribution does not generate values of y that align with the observed values, given that the observed values of y are bimodal. However, because of the influence of the data, in comparison to the prior predictive distribution, the posterior predictive distribution is shifted to the right.
 
 ```{r}
 loo_post_iv <- loo(post_iv)
 loo_post_iv
 ```
 
+All Pareto k values are less than 0.5 so importance sampling is able to calculate the `elpd_loo` accurately.
+
+```{r}
+# comparison of models
+loo_compare(loo_post_iv, loo_post)
+```
+
+Using cross validation, the simpler model performs better in terms of predictive accuracy. The `elpd_diff` is much larger than the `se_diff`.
+
+```{r}
+# comparison of predictions
+yrep <- rstan::extract(post_iv, "yrep")[[1]]
+low  <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 1 / 3)
+high <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 2 / 3)
+
+y <- c(as.numeric(stan_data_iv$y_child),
+           as.numeric(stan_data_iv$y_nochild))
+
+c(too_low = mean(y < low), 
+  just_right = mean(y > low & y < high),
+  too_high = mean(y > high))
+```
+
+The model does not have good prediction capabilities. It is only predicting extreme values (in the bottom and highest tertile). Only 3% of observed y values fall within the middle tertile.
+
 ## Re-run with weeks worked outcome
-```{r, cache = TRUE}
+
+```{r}
 # set stan data
 stan_data_iv <- list(N = nrow(df_samp),
                   N_child = nrow(df_child),
@@ -391,12 +500,18 @@ stan_data_iv <- list(N = nrow(df_samp),
                   y_nochild = df_nochild$wkswork1,
                   prior_only = FALSE,
                   m = rep(-0.1, 5), 
-                  scale = rep(0.3, 5), r = r)
-
-post_iv_wk <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
-print(post_iv_wk, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+                  scale = rep(1, 5), r = r)
 ```
 
+```{r, cache = TRUE}
+post_iv_wk <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
+```
+```{r}
+print(post_iv_wk, pars = c("alpha0", "alpha1", 
+                           "beta0", "beta1", "beta2", "sigma", "rho"))
+```
+
+With weeks worked as the outcome, the coefficient on `cnum_mt2` is on average 5.29 with a 95% credible interval between 3.48 and 7.99. Similar to the model with log wages as the outcome, this indicates surprisingly a positive impact of fertility on labor supply.
 
 ## Re-run two-stage model for college subgroup
 
@@ -431,12 +546,90 @@ stan_data_iv <- list(N = nrow(df_samp2),
                   scale = rep(0.3, 5), r = r)
 
 post_iv_coll <- stan("iv_bin.stan", data = stan_data_iv, seed = 1234)
-print(post_iv_coll, pars = c("alpha0", "alpha1", "beta0", "beta1", "beta2", "sigma", "rho"))
+print(post_iv_coll, pars = c("alpha0", "alpha1", 
+                             "beta0", "beta1", "beta2", "sigma", "rho"))
 ```
 
+The effect of additional children among college-educated women is likely positive as well. The marginal distribution of the coefficient has a 95% credible interval of 0.52 to 1.55 and is on average 1.04 (in log units). For generating the posterior distribution, I resampled 3,000 records from the population of only college-educated women.
 
+## Frequentist example (for reference)
 
+* I include these results, which use maximum likelihood estimation, for comparison. The first chunk uses the same sample as the non-subgroup models (3,000 records total). The second chunk uses the first sample. By comparing the different results, one can see the estimates of the effect of fertility vary drastically between the small sample and the larger sample. Similarly, the small sample estimates do not substantively align with the full sample estimates. It may be more accurate to run the stan models on the full sample. However, my computer does not have the memory or processing power to do so.
 
+```{r}
+# output using the sample
+# outcome is log wage
+twostage_fit <- treatReg(
+selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+outcome = l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+data = df_samp
+)
+summary(twostage_fit)
+
+# outcome is incwage
+twostage_fit <- treatReg(
+selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+outcome = incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+data = df_samp
+)
+summary(twostage_fit)
+
+## outcome is weeks worked
+twostage_fit <- treatReg(
+  selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  outcome = wkswork1 ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  data = df_samp
+)
+summary(twostage_fit)
+```
+
+```{r}
+df <- df %>% 
+  mutate(across(c("age", "age_fbirth"), ~ . - mean(., na.rm = T))) %>% 
+  mutate(l_incwage = if_else(incwage <= 0, log(1), log(incwage)),
+         l_wkswork1 = if_else(wkswork1 <= 0, log(1), log(wkswork1)))
+
+# output using full data
+# outcome is log wage
+twostage_fit <- treatReg(
+  selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  outcome = l_incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  data = df
+)
+summary(twostage_fit)
+
+# outcome is incwage
+twostage_fit <- treatReg(
+  selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  outcome = incwage ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  data = df
+)
+summary(twostage_fit)
+
+## outcome is weeks worked
+twostage_fit <- treatReg(
+  selection = cnum_mt2 ~ samesex + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  outcome = wkswork1 ~ cnum_mt2 + age + age_fbirth + f_boy + s_boy + r_black + hisp + r_oth,
+  data = df
+)
+summary(twostage_fit)
+```
+
+## Conclusion
+
+The Bayesian analysis with the linear model indicates that the effect of additional children is strongly negative--in dollars and when using a log-transformed outcome. The credible interval encompasses the estimate from Angrist and Evans' OLS regression and supports the initial findings from the frequentist approach. However, the linear model does not allow for causal claims. Women who decide to have a third child may be substantively different than women who do not. For example, they may be more likely to stay out of the labor force and would, on average, have lower earnings. There may be other unobserved attributes that may confound the results. And, as Angrist and Evans' argue in their paper, there is reason to believe that income may influence fertility.
+
+To parse out a causal effect, Angrist and Evans propose using instrumental variables estimates. In this case, the instrument is an indicator for whether the first two children are the same sex. In economics, it's quite common to use two stage least squares (TSLS), but TSLS does not work well in finite samples and it does not have an expectation. To replicate the IV results, I used a likelihood function, which is derived [here](https://cran.r-project.org/web/packages/sampleSelection/vignettes/treatReg.pdf). In contrast to the linear model, the Bayesian analysis directly contradicts the results Angrist and Evans' produced using TSLS. The models indicate a strong positive effect on both log income and on weeks worked. I've already identified several reasons this may be the case:
+
+1. the small sample for this analysis, which is only 3,000 randomly selected observations from the full sample
+2. income is conditional on labor force participation and, since the observed values of y are bifurcated, the models have difficulty predicting values of y accurately
+  * However, the IV results do indicate a positive effect on weeks worked as well, which is a direct measurement of labor force participation.
+3. the result is unexpected in terms of my own prior beliefs and in relation to previous research
+  * Since the instrument is weak, perhaps the group of 'compliers' is significantly different from the rest of the population and the local average treatment effect (LATE) does not approximate the ATE for the full population.
+  * Similarly, women with two children are likely not representative of the population of all women.
+4. perhaps the likelihood derivation in my Stan program is incorrect
+
+I hope that 
 
 
 

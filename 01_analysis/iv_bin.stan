@@ -20,7 +20,7 @@ parameters {
   real<lower = 0> sigma;
   real<lower = 0, upper = 1> p; // CDF for rho
   real alpha0;
-  vector[K + 1] alpha1;
+  vector[K + 1] alpha1; // includes additional column for samesex pred
   real beta0;
   vector[K] beta1;
   real beta2;
@@ -43,8 +43,8 @@ model {
     target += normal_lpdf(y_child  | mu_child, sigma);
     target += normal_lpdf(y_nochild | mu_nochild, sigma);
       
-    target += normal_lcdf(0 | eta_child, conditional_sd);
-    target += normal_lcdf(0 | -eta_nochild, conditional_sd);
+    target += normal_lcdf(0 | -eta_child, conditional_sd);
+    target += normal_lcdf(0 | eta_nochild, conditional_sd);
   }
   target += normal_lpdf(alpha0  | m[1], scale[1]);
   target += normal_lpdf(alpha1  | m[2], scale[2]);
@@ -62,7 +62,7 @@ generated quantities {
   {
     for (n in 1:N_child) {
       log_lik[n] = normal_lpdf(y_child[n] | mu_child[n], sigma) + 
-                       normal_lcdf(0 | eta_child[n], conditional_sd);
+                       normal_lcdf(0 | -eta_child[n], conditional_sd);
       mu = mu_child[n];
       
       /* intermediate outcome: if they have an additional child */
@@ -73,7 +73,7 @@ generated quantities {
     
     for (n in 1:N_nochild) {
       log_lik[N_child + n] = normal_lpdf(y_nochild[n] | mu_nochild[n], sigma) + 
-                       normal_lcdf(0 | -eta_nochild[n], conditional_sd);
+                       normal_lcdf(0 | eta_nochild[n], conditional_sd);
       mu = mu_nochild[n];
       
       /* intermediate outcome: if they have an additional child */
