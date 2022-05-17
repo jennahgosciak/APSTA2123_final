@@ -32,9 +32,8 @@ library(haven)
 set.seed(1690)
 ```
 
-This PDF uses the same data as [final_project.pdf](), but uses the Gamma distribution with a log link and a hierarchical model where intercepts vary by state.
 
-```{r}
+```{r, include = F}
 ## load data
 df <- read_dta("../00_data/sample1.dta")
 df_samp <- df %>% 
@@ -45,13 +44,13 @@ df_samp <- df_samp %>%
   mutate(l_incwage = if_else(incwage <= 0, log(1), log(incwage)),
          l_wkswork1 = if_else(wkswork1 <= 0, log(1), log(wkswork1)),
          incwage_mod = if_else(incwage <= 0, 1, incwage))
-
-df_samp %>% 
-  group_by(samesex) %>% 
-  summarize(n = n())
 ```
 
 # Analysis
+
+**Note::**
+This PDF uses the same data as [final_project.pdf](), but uses the Gamma distribution with a log link and a hierarchical model where intercepts vary by state.
+
 
 ## Model with Gamma distribution
 
@@ -61,7 +60,7 @@ df_samp %>%
 
 ### Using `rstanarm` for the Gamma distribution with log link
 
-```{r}
+```{r, cache = TRUE}
 ## running with rstanarm
 post_gamma_rs <- stan_glm(incwage_mod ~ cnum_mt2 + age + age_fbirth + f_boy + 
                             s_boy + r_black + hisp + r_oth, data = df_samp,
@@ -109,8 +108,7 @@ writeLines(readLines("linear_gamma.stan"))
 m <- c(10, rep(-0.1, 8))
 s<- rep(1, 9)
 
-stan_data <- list(N = nrow(df_samp2), K = 8, 
-                                        y = df_samp2$incwage_mod, 
+stan_data <- list(N = nrow(df_samp2), K = 8, y = df_samp2$incwage_mod, 
                                         X = df_samp2[, c("cnum_mt2", "age", 
                                                         "age_fbirth", "f_boy", 
                                                    "s_boy", "r_black", 
@@ -135,7 +133,9 @@ The prior predictive distribution generates large, extreme values of y. At the s
 ```{r, cache = TRUE}
 # set prior to false, run the full dist
 stan_data$prior_only <- FALSE
-post_gamma <- stan("linear_gamma.stan", data = stan_data, seed = 12345)
+
+post_gamma <- stan("linear_gamma.stan", data = stan_data,
+                   seed = 12345)
 ```
 
 ```{r}
@@ -143,7 +143,7 @@ post_gamma <- stan("linear_gamma.stan", data = stan_data, seed = 12345)
 print(post_gamma, pars = c("alpha", "beta", "shape"))
 ```
 
-The posterior distribution when using a log link and the gamma distribution is not conclusive about the effect of additional children on earnings. The coefficient on `cnum_mt2` is on average 0 and the 95% credible interval is between -0.01 and 0.01. Almost all the predictors ahve values close to 0. The small values for the coefficients, as indicated by the marginal distributions, is likely due to the conversion from log earnings to earnings in dollars.
+The posterior distribution when using a log link and the gamma distribution is not conclusive about the effect of additional children on earnings. The coefficient on `cnum_mt2` is on average 0 and the 95% credible interval is between -0.01 and 0.01. Almost all the predictors have values close to 0. The small values for the coefficients, as indicated by the marginal distributions, is likely due to the conversion from log earnings to earnings in dollars.
 
 
 ```{r}
@@ -176,7 +176,7 @@ c(too_low = mean(y < low),
   too_high = mean(y > high))
 ```
 
-The model is predicting too many extreme values (bottom and top third percentiles). Only 8% of observed y-values fall in only the middle third percentile.
+The model is predicting too many extreme values (bottom and top third percentiles). Only 10% of observed y-values fall in only the middle third percentile.
 
 ```{r}
 loo_gamma2 <- loo(post_gamma)
@@ -217,7 +217,7 @@ post_mlm <- stan("linear_mlm.stan", data = stan_data, seed = 1234)
 print(post_mlm, pars = c("alpha", "beta"))
 ```
 
-When the alpha values vary, the coefficient on `cnum_mt2` is inconclusive. The 95% credible interval is from -0.54 to 0.15 and the mean is -0.19. Considering that the outcome is in log units, this indicates a broad range of effects and a high level of uncertainty about the impact of any one covariate.
+When the alpha values vary, the coefficient on `cnum_mt2` is inconclusive. The 95% credible interval is from -0.56 to 0.11 and the mean is -0.23. Considering that the outcome is in log units, this indicates a broad range of effects and a high level of uncertainty about the impact of any one covariate.
 
 
 ```{r}
@@ -248,7 +248,7 @@ c(too_low = mean(y < low),
 
 Since the observed values of y appear to be bimodal, the posterior predictive distribution, which is approximately normal, has trouble predicting values at both ends. 
 
-The model is predicting too many extreme values (in the bottom and top tertile). In terms of prediction, it is slightly better than the previous model with the gamma distribution and a log link. Almost 6% of observed y values fall within the middle tertile.
+The model is predicting too many extreme values (in the bottom and top tertile). In terms of prediction, it is slightly better than the previous model with the gamma distribution and a log link. 10% of observed y values fall within the middle tertile.
 
 ## Hierarchical IV model
 
@@ -298,7 +298,7 @@ post_iv_mlm <- stan("iv_bin_mlm.stan",
 print(post_iv_mlm, pars = c("beta1", "beta2", "alpha0", "alpha1"))
 ```
 
-Based on the value of `beta2`, the output indicates that the impact of `cnum_mt2` is likely positive when including an instrument to isolate the causal effect and allowing variation in intercepts. The average estimated value of `beta2` is 4.13 and the 95% credible interval is from 3.74 to 4.52. Similar to the non-hierarchical models, there may be some limitations to the interpretation of a true effect from this model:
+Based on the value of `beta2`, the output indicates that the impact of `cnum_mt2` is likely positive when including an instrument to isolate the causal effect and allowing variation in intercepts. The average estimated value of `beta2` is 4.13 and the 95% credible interval is from 3.83 to 4.62. Similar to the non-hierarchical models, there may be some limitations to the interpretation of a true effect from this model:
 
 1. it only uses 3,000 observations from the full sample
 2. it does not account for the fact that income is conditional on labor force participation
@@ -309,7 +309,7 @@ Based on the value of `beta2`, the output indicates that the impact of `cnum_mt2
 loo_iv_mlm <- loo(post_iv_mlm)
 loo_iv_mlm
 
-loo_compare(loo_iv_mlm, loo_mlm, loo_gamma)
+loo_compare(loo_iv_mlm, loo_mlm)
 ```
 
 The simpler linear model appears to be the better model in terms of prediction accuracy based on cross-validation. The `elpd_diff` values is much larger than the SE.
@@ -324,11 +324,11 @@ pp_check(c(as.numeric(stan_data_iv$y_child),
 )
 
 # comparison of predictions
-yrep <- rstan::extract(post_mlm, "yrep")[[1]]
+yrep <- rstan::extract(post_iv_mlm, "yrep")[[1]]
 low  <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 1 / 3)
 high <- apply(yrep, MARGIN = 2, FUN = quantile, probs = 2 / 3)
 
-y <- stan_data$y
+y <- stan_data_iv$y
 
 c(too_low = mean(y < low), 
   just_right = mean(y > low & y < high),

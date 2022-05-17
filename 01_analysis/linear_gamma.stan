@@ -21,7 +21,7 @@ transformed parameters {
 
 model { // log likelihood
   if (!prior_only) {
-    for (i in 1:N) target += gamma_lpdf(y | shape, shape/exp(mu[i]));
+    for (i in 1:N) target += gamma_lpdf(y[i] | shape, shape/exp(mu[i]));
   }
   target += normal_lpdf(alpha | m[1],   scale[1]); 
   target += normal_lpdf(beta | m[2:K + 1], scale[2:K + 1]);

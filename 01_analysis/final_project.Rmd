@@ -629,8 +629,7 @@ To parse out a causal effect, Angrist and Evans propose using instrumental varia
   * Similarly, women with two children are likely not representative of the population of all women.
 4. perhaps the likelihood derivation in my Stan program is incorrect
 
-I hope that 
-
+The results from this Bayesian analysis are surprising, but they are also very much exploratory. At the very least, I hope this functions as a working example for my future work. My original final project idea was to examine the results of the Moving to Opportunity (MTO) experiment, which is a famous experiment about the impact of neighborhoods on life outcomes like employment and income later in life. In particular, I wanted to examine subgroup impacts to see if the significance values identified in the frequentist analysis truly indicated non-zero impacts. However, the public use file (PUF) for the MTO experiment is masked to such an extent that it's impossible to use it for anything other than point estimates. Since the MTO study uses random assignment as an instrument for actual treatment compliance, the instrument in the study is likely much stronger and, if the data ever becomes accessible, I would be interested in the estimates generated from the models coded here.
 
 
 
