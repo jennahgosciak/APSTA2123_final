@@ -64,7 +64,7 @@ For the Bayesian analysis, I use the following methods:
 * `s_boy` is an indicator for whether the woman's second child was a boy.
 * `r_black`, `hisp`, and `r_oth` are indicators for race and ethnicity.
 
-To replicate this analysis, the data is saved [here]()
+The public Github associated with this project is saved [here](https://github.com/jennahgosciak/APSTA2123_final).
 
 ```{r}
 ## load data
