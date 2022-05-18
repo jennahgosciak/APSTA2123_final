@@ -1,5 +1,6 @@
 ## Repo specific
-00_data/
+00_data/*
+!00_data/save_extract.csv
 
 nul*
 

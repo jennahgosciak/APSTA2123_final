@@ -7,7 +7,7 @@ data {
   int<lower = 0, upper = 1> prior_only;   // ignore data?
   vector[K + 1] m;                        // prior mean values
   vector<lower = 0>[K + 1] scale;         // prior scale values
-  real r;
+  real r;                                 // rate for shape param
 }
 parameters {
   vector[K] beta;
