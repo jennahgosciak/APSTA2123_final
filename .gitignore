@@ -1,6 +1,11 @@
 ## Repo specific
+<<<<<<< HEAD
 00_data/*
 !00_data/save_extract.csv
+=======
+00_data/
+!sample1.dta
+>>>>>>> 312f352ef76c9fc190e29603d9bf476030f87dfb
 
 nul*
 
