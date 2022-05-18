@@ -1,7 +1,7 @@
 #include quantile_functions.stan
 data {
   int<lower = 0> N;
-  int<lower = 0> N_child;
+  int<lower = 0> N_child; // split into child v. no child
   int<lower = 0> N_nochild;
   int<lower = 0> K; // number of predictors
   int<lower = 0> J; // number of states

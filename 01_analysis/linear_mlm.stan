@@ -8,8 +8,8 @@ data {
   vector[N] y;      // outcomes
   int<lower = 0, upper = 1> prior_only;   // ignore data?
   vector[K + 1] m;                        // prior medians
-  vector<lower = 0>[K + 1] scale;             // prior scale values
-  real<lower = 0> r;
+  vector<lower = 0>[K + 1] scale;         // prior scale values
+  real<lower = 0> r;                      // rate for sigma
 }
 parameters {
   vector[K] beta;
