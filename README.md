@@ -9,7 +9,7 @@ In their paper, Angrist and Evans use data from the 1980 and 1990 Census [Public
 
 ![Replicationn of Table 7](https://github.com/jennahgosciak/APSTA2123_final/blob/main/01_analysis/replication.jpg)
 
-I only replicated this analysis with data from the 1980 Census, which is more than 40 years old and significantly dates the conclusions from my analysis. Additionally, given time and processing constraints, I randomly sampled 3,000 records from the total dataset of around 400,000 records. A more precise estimate of the causal estimate would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working example for updating this analysis with more recent data and larger datasets.
+I only replicated this analysis with data from the 1980 Census, which is more than 40 years old and significantly dates the conclusions from my analysis. Additionally, given time and processing constraints, I randomly sampled 3,000 records from the total dataset of around 400,000 records. A more precise estimate of the causal effect would use more data. I hope that in replicating this analysis using Bayesian inference I will either strengthen (or contradict) the claims made by Angrist and Evans and provide a working example for updating this analysis with more recent data and larger datasets.
 
 For the Bayesian analysis, I use the following methods:
 * a simple linear model with a normal PDF as the likelihood and `incwage` as the outcome
